@@ -6,6 +6,8 @@
  * FLUX 계열 모델은 영어 프롬프트에서 품질이 크게 좋아지므로 모든 입력을 영어로 정규화합니다.
  */
 
+import { togetherKey } from '@/lib/together';
+
 const TOGETHER_BASE = process.env.TOGETHER_BASE_URL || 'https://api.together.ai/v1';
 const PROMPT_MODEL =
   process.env.TOGETHER_PROMPT_MODEL || 'meta-llama/Llama-3.3-70B-Instruct-Turbo';
@@ -80,7 +82,7 @@ export async function preparePrompt(userPrompt: string, scripture?: string | nul
     return { english: '', wasEnglish: false, safe: false, reason: blocked, fallback: false };
   }
 
-  const apiKey = process.env.TOGETHER_AI_API_KEY;
+  const apiKey = togetherKey();
   if (!apiKey || apiKey.startsWith('your-')) {
     return { english: userPrompt, wasEnglish: true, safe: true, fallback: true };
   }

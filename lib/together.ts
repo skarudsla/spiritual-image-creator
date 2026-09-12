@@ -10,6 +10,12 @@
  *  - Rundiffusion/Juggernaut-Lightning-Flux  ($0.0017/MP, 매우 저렴·빠름)
  *  - black-forest-labs/FLUX.1.1-pro          ($0.04/MP, 고품질)
  */
+/** TOGETHER_AI_API_KEY 앞뒤 공백/따옴표 제거 */
+export function togetherKey(): string | undefined {
+  const t = process.env.TOGETHER_AI_API_KEY?.trim().replace(/^["']|["']$/g, '').trim();
+  return t || undefined;
+}
+
 export const DEFAULT_IMAGE_MODEL =
   process.env.TOGETHER_IMAGE_MODEL || 'black-forest-labs/FLUX.2-dev';
 
@@ -28,7 +34,7 @@ export class TogetherError extends Error {
 }
 
 export function isTogetherConfigured(): boolean {
-  const key = process.env.TOGETHER_AI_API_KEY;
+  const key = togetherKey();
   return !!key && !key.startsWith('your-');
 }
 
@@ -69,7 +75,7 @@ export async function generateImage(params: GenerateImageParams): Promise<Genera
     res = await fetch(TOGETHER_URL, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${process.env.TOGETHER_AI_API_KEY}`,
+        Authorization: `Bearer ${togetherKey()}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(body),
