@@ -28,3 +28,6 @@ Supabase SQL Editor 에서 `supabase/migrations/` 의 SQL 을 번호 순서대�
 | Production | `main` | spiritual-image-creator-app.vercel.app | prod (도쿄, `spiritual-image-creator`) | 실사용자 |
 
 작업 흐름: `dev` 브랜치에서 개발/검증 → `main`으로 merge → 자동 실배포. Supabase 스키마 변경은 `supabase/migrations/` 에 파일 추가 후 dev → prod 순으로 SQL Editor 에서 실행.
+
+## dev 브랜치
+테스트 환경(싱가포르 Supabase)으로 배포되는 브랜치. Preview URL: https://spiritual-image-creator-app-git-dev-skarudsla.vercel.app
