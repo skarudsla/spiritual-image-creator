@@ -26,6 +26,9 @@ export function useDashboard() {
   return ctx;
 }
 
+/** production | preview | development — Vercel 환경 변수로 주입, 없으면 development */
+const APP_ENV = process.env.NEXT_PUBLIC_APP_ENV || 'development';
+
 const NAV = [
   { href: '/dashboard', label: '홈' },
   { href: '/dashboard/generate', label: '이미지 생성' },
@@ -118,6 +121,14 @@ export default function DashboardShell({ children }: { children: React.ReactNode
           <Link href="/dashboard" style={{ color: 'white', textDecoration: 'none', fontSize: '20px', fontWeight: 'bold' }}>
             Spiritual Image Creator
           </Link>
+          {APP_ENV !== 'production' && (
+            <span
+              title="테스트 환경 — 실서버 데이터와 분리되어 있습니다"
+              style={{ fontSize: '11px', fontWeight: 'bold', color: '#1e293b', background: '#f59e0b', borderRadius: '4px', padding: '2px 8px', letterSpacing: '0.5px' }}
+            >
+              {APP_ENV === 'preview' ? 'PREVIEW' : 'DEV'}
+            </span>
+          )}
           <nav style={{ display: 'flex', gap: '4px' }}>
             {NAV.map(item => {
               const active = pathname === item.href;
