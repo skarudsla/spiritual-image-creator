@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
 
   const { data, error, count } = await supabaseAdmin
     .from('images')
-    .select('id, prompt, prompt_en, style, scripture, model, model_id, mode, width, height, image_url, created_at', { count: 'exact' })
+    .select('id, prompt, prompt_en, style, scripture, model, model_id, mode, width, height, image_url, is_flagged, created_at', { count: 'exact' })
     .eq('user_id', user.id)
     .order('created_at', { ascending: false })
     .range(from, to);

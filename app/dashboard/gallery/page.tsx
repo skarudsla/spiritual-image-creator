@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { IMAGE_STYLES, type ImageStyle, type GeneratedImage } from '@/lib/types';
+import { IMAGE_STYLES, REPORT_REASONS, type ImageStyle, type GeneratedImage, type ReportReason } from '@/lib/types';
 
 type GalleryImage = Omit<GeneratedImage, 'user_id' | 'storage_path'>;
 
@@ -15,6 +15,11 @@ export default function GalleryPage() {
   const [error, setError] = useState('');
   const [selected, setSelected] = useState<GalleryImage | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [reporting, setReporting] = useState(false);
+  const [reportReason, setReportReason] = useState<ReportReason>('sexual');
+  const [reportDetails, setReportDetails] = useState('');
+  const [reportBusy, setReportBusy] = useState(false);
+  const [reportMsg, setReportMsg] = useState('');
 
   const load = useCallback(async (p: number, append: boolean) => {
     setLoading(true);
@@ -60,6 +65,39 @@ export default function GalleryPage() {
     }
   };
 
+  const openImage = (img: GalleryImage) => {
+    setSelected(img);
+    setReporting(false);
+    setReportMsg('');
+    setReportDetails('');
+  };
+
+  const handleReport = async () => {
+    if (!selected) return;
+    setReportBusy(true);
+    setReportMsg('');
+    try {
+      const res = await fetch('/api/reports', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageId: selected.id, reason: reportReason, details: reportDetails }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        setReportMsg(`❌ ${data.error || '신고에 실패했습니다.'}`);
+        return;
+      }
+      setReportMsg(`✅ ${data.message}`);
+      setImages(prev => prev.map(i => (i.id === selected.id ? { ...i, is_flagged: true } : i)));
+      setSelected(s => (s ? { ...s, is_flagged: true } : s));
+      setReporting(false);
+    } catch {
+      setReportMsg('❌ 네트워크 오류가 발생했습니다.');
+    } finally {
+      setReportBusy(false);
+    }
+  };
+
   return (
     <section style={{ background: '#1e293b', padding: '28px', borderRadius: '12px', boxShadow: '0 10px 40px rgba(0, 0, 0, 0.3)' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginBottom: '20px' }}>
@@ -93,7 +131,7 @@ export default function GalleryPage() {
           <button
             key={img.id}
             type="button"
-            onClick={() => setSelected(img)}
+            onClick={() => openImage(img)}
             style={{
               padding: 0,
               border: '1px solid #475569',
@@ -105,9 +143,14 @@ export default function GalleryPage() {
               color: 'white',
             }}
           >
-            <div style={{ aspectRatio: `${img.width} / ${img.height}`, background: '#0f172a' }}>
+            <div style={{ aspectRatio: `${img.width} / ${img.height}`, background: '#0f172a', position: 'relative' }}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={img.image_url} alt={img.prompt} loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+              <img src={img.image_url} alt={img.prompt} loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', filter: img.is_flagged ? 'blur(8px)' : undefined }} />
+              {img.is_flagged && (
+                <span style={{ position: 'absolute', top: '8px', left: '8px', background: '#f59e0b', color: '#1e293b', fontSize: '11px', fontWeight: 'bold', padding: '2px 8px', borderRadius: '4px' }}>
+                  🚩 신고됨
+                </span>
+              )}
             </div>
             <div style={{ padding: '10px' }}>
               <p style={{ margin: '0 0 4px', fontSize: '12px', lineHeight: 1.4, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
@@ -170,12 +213,68 @@ export default function GalleryPage() {
                 </button>
                 <button
                   type="button"
+                  onClick={() => { setReporting(r => !r); setReportMsg(''); }}
+                  disabled={selected.is_flagged}
+                  title={selected.is_flagged ? '이미 신고된 이미지입니다' : '부적절한 결과물 신고'}
+                  style={{ padding: '8px 14px', background: selected.is_flagged ? '#4b5563' : '#f59e0b', color: '#1e293b', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 'bold', cursor: selected.is_flagged ? 'not-allowed' : 'pointer' }}
+                >
+                  {selected.is_flagged ? '🚩 신고됨' : '🚩 신고'}
+                </button>
+                <button
+                  type="button"
                   onClick={() => setSelected(null)}
                   style={{ padding: '8px 14px', background: '#334155', color: 'white', border: 'none', borderRadius: '6px', fontSize: '13px', cursor: 'pointer', marginLeft: 'auto' }}
                 >
                   닫기
                 </button>
               </div>
+
+              {reportMsg && (
+                <p style={{ marginTop: '12px', fontSize: '13px', color: reportMsg.startsWith('✅') ? '#10b981' : '#ef4444' }}>{reportMsg}</p>
+              )}
+
+              {reporting && !selected.is_flagged && (
+                <div style={{ marginTop: '14px', padding: '14px', background: '#0f172a', borderRadius: '8px', border: '1px solid #475569' }}>
+                  <p style={{ margin: '0 0 8px', fontWeight: 'bold', color: 'white' }}>부적절한 이미지 신고</p>
+                  <p style={{ margin: '0 0 10px', fontSize: '12px', color: '#94a3b8' }}>
+                    AI 가 만든 결과물이 성적·폭력적·혐오적이거나 신앙적으로 부적절하다면 알려주세요. 신고된 이미지는 흐리게 표시되고 운영자가 검토합니다.
+                  </p>
+                  <select
+                    value={reportReason}
+                    onChange={e => setReportReason(e.target.value as ReportReason)}
+                    style={{ width: '100%', padding: '9px', marginBottom: '8px', background: '#1e293b', color: 'white', border: '1px solid #475569', borderRadius: '6px', fontSize: '13px' }}
+                  >
+                    {Object.entries(REPORT_REASONS).map(([k, label]) => (
+                      <option key={k} value={k}>{label}</option>
+                    ))}
+                  </select>
+                  <textarea
+                    value={reportDetails}
+                    onChange={e => setReportDetails(e.target.value)}
+                    placeholder="추가 설명 (선택)"
+                    rows={2}
+                    maxLength={1000}
+                    style={{ width: '100%', padding: '9px', marginBottom: '8px', background: '#1e293b', color: 'white', border: '1px solid #475569', borderRadius: '6px', fontSize: '13px', boxSizing: 'border-box', resize: 'vertical' }}
+                  />
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button
+                      type="button"
+                      onClick={handleReport}
+                      disabled={reportBusy}
+                      style={{ padding: '8px 14px', background: reportBusy ? '#4b5563' : '#ef4444', color: 'white', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 'bold', cursor: reportBusy ? 'not-allowed' : 'pointer' }}
+                    >
+                      {reportBusy ? '접수 중...' : '신고 접수'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setReporting(false)}
+                      style={{ padding: '8px 14px', background: '#334155', color: 'white', border: 'none', borderRadius: '6px', fontSize: '13px', cursor: 'pointer' }}
+                    >
+                      취소
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

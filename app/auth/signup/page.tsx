@@ -4,6 +4,17 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
+function GoogleIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
+      <path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9 3.5l6.7-6.7C35.6 2.5 30.2 0 24 0 14.6 0 6.5 5.4 2.6 13.3l7.8 6C12.3 13.6 17.7 9.5 24 9.5z" />
+      <path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.5 5.8c4.4-4.1 7.1-10.1 7.1-17.5z" />
+      <path fill="#FBBC05" d="M10.4 28.7c-.5-1.5-.8-3-.8-4.7s.3-3.2.8-4.7l-7.8-6C.9 16.6 0 20.2 0 24s.9 7.4 2.6 10.7l7.8-6z" />
+      <path fill="#34A853" d="M24 48c6.2 0 11.6-2 15.4-5.6l-7.5-5.8c-2.1 1.4-4.8 2.3-7.9 2.3-6.3 0-11.7-4.1-13.6-9.8l-7.8 6C6.5 42.6 14.6 48 24 48z" />
+    </svg>
+  );
+}
+
 export default function SignUp() {
   const router = useRouter();
   const [formData, setFormData] = useState({
@@ -13,6 +24,7 @@ export default function SignUp() {
     password: '',
     confirmPassword: '',
   });
+  const [agreeTerms, setAgreeTerms] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -58,6 +70,12 @@ export default function SignUp() {
       return;
     }
 
+    if (!agreeTerms) {
+      setError('이용약관과 개인정보처리방침에 동의해주세요.');
+      setLoading(false);
+      return;
+    }
+
     try {
       const res = await fetch('/api/auth/signup', {
         method: 'POST',
@@ -67,6 +85,7 @@ export default function SignUp() {
           lastName: formData.lastName,
           email: formData.email,
           password: formData.password,
+          agreeTerms,
         }),
       });
 
@@ -329,6 +348,20 @@ export default function SignUp() {
             />
           </div>
 
+          <label style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', fontSize: '13px', color: '#cbd5e1', marginBottom: '18px', cursor: 'pointer', lineHeight: 1.5 }}>
+            <input
+              type="checkbox"
+              name="agreeTerms"
+              checked={agreeTerms}
+              onChange={e => setAgreeTerms(e.target.checked)}
+              style={{ marginTop: '3px', accentColor: '#10b981' }}
+            />
+            <span>
+              <Link href="/legal/terms" target="_blank" style={{ color: '#3b82f6' }}>이용약관</Link> 및{' '}
+              <Link href="/legal/privacy" target="_blank" style={{ color: '#3b82f6' }}>개인정보처리방침</Link>에 동의합니다. (필수)
+            </span>
+          </label>
+
           <button
             type="submit"
             disabled={loading}
@@ -347,6 +380,25 @@ export default function SignUp() {
           >
             {loading ? '처리 중...' : '회원가입'}
           </button>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', margin: '4px 0 15px', color: '#64748b', fontSize: '12px' }}>
+            <span style={{ flex: 1, height: '1px', background: '#334155' }} />또는<span style={{ flex: 1, height: '1px', background: '#334155' }} />
+          </div>
+
+          <a
+            href="/api/auth/google?next=/dashboard"
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px',
+              width: '100%', padding: '11px', boxSizing: 'border-box',
+              background: 'white', color: '#1f2937', borderRadius: '6px',
+              fontSize: '15px', fontWeight: 'bold', textDecoration: 'none', marginBottom: '8px'
+            }}
+          >
+            <GoogleIcon /> Google 계정으로 시작하기
+          </a>
+          <p style={{ fontSize: '11px', color: '#64748b', textAlign: 'center', margin: '0 0 18px', lineHeight: 1.5 }}>
+            Google 로 계속하면 이용약관과 개인정보처리방침에 동의하는 것으로 간주됩니다.
+          </p>
 
           <div style={{ textAlign: 'center' }}>
             <p style={{ color: '#cbd5e1', marginBottom: '10px' }}>이미 계정이 있으신가요?</p>

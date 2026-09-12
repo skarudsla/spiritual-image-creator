@@ -20,6 +20,15 @@ Supabase SQL Editor 에서 `supabase/migrations/` 의 SQL 을 번호 순서대�
 - `app/dashboard/*` 대시보드(생성, 갤러리) · `app/api/generate` 이미지 생성 · `app/api/gallery` · `app/api/credit`
 - `lib/supabase.ts` 서버 클라이언트 · `lib/auth.ts` 세션 · `lib/together.ts` 이미지 API · `lib/prompt.ts` 번역+안전성
 
+## 안전장치 (STEP 28~30)
+- 남용 방어: 계정/IP 별 요청 제한, 전체 일일 상한, `GENERATION_PAUSED` 긴급 정지
+- 프롬프트 검수: 금지어 + LLM 안전성 판정 (크레딧 차감 전)
+- 결과 이미지 검수: 비전 모델로 부적절 판정 시 저장하지 않고 환불 (`OUTPUT_MODERATION=off` 로 해제)
+- 일시적 생성 오류는 최대 3회 자동 재시도
+- 약관/개인정보처리방침 (`/legal/terms`, `/legal/privacy`) + 가입 시 동의 기록 (`user_consents`)
+- 이미지 신고 (`/api/reports` → `image_reports`, 신고된 이미지는 흐리게 표시)
+- 구글 로그인: Supabase Auth → Providers → Google 활성화 + Redirect URLs 에 `<사이트>/auth/callback` 등록
+
 ## 환경 구분
 | 환경 | Git 브랜치 | Vercel | Supabase | 용도 |
 |---|---|---|---|---|

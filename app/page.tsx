@@ -40,6 +40,11 @@ export default function Home() {
           Sign Up
         </Link>
       </div>
+
+      <footer style={{ marginTop: '60px', fontSize: '13px', color: '#64748b', display: 'flex', gap: '16px' }}>
+        <Link href="/legal/terms" style={{ color: '#94a3b8', textDecoration: 'none' }}>이용약관</Link>
+        <Link href="/legal/privacy" style={{ color: '#94a3b8', textDecoration: 'none' }}>개인정보처리방침</Link>
+      </footer>
     </div>
   );
 }

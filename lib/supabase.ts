@@ -13,6 +13,9 @@ if (!supabaseUrl || !serviceRoleKey) {
   throw new Error('NEXT_PUBLIC_SUPABASE_URL 또는 SUPABASE_SERVICE_ROLE_KEY 환경변수가 설정되지 않았습니다.');
 }
 
+/** Supabase 프로젝트 URL (OAuth authorize 주소 조립용) */
+export const SUPABASE_URL = supabaseUrl;
+
 /**
  * 서버 전용 Supabase 클라이언트 (API Route에서만 사용)
  * 서비스 롤 키를 사용하므로 절대 클라이언트 컴포넌트에서 import 하지 마세요.

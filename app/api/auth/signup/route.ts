@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { checkSignupAllowed, clientIp } from '@/lib/limits';
+import { recordConsent } from '@/lib/consent';
+import { TERMS_VERSION } from '@/lib/legal';
 
 export const runtime = 'nodejs';
 
@@ -28,7 +30,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, error: limit.message }, { status: 429 });
   }
 
-  let body: { firstName?: string; lastName?: string; email?: string; password?: string };
+  let body: { firstName?: string; lastName?: string; email?: string; password?: string; agreeTerms?: boolean };
   try {
     body = await request.json();
   } catch {
@@ -49,6 +51,12 @@ export async function POST(request: NextRequest) {
   if (password.length < 8) {
     return NextResponse.json({ success: false, error: '비밀번호는 최소 8자 이상이어야 합니다.' }, { status: 400 });
   }
+  if (body.agreeTerms !== true) {
+    return NextResponse.json(
+      { success: false, error: '이용약관과 개인정보처리방침에 동의해야 가입할 수 있습니다.', code: 'TERMS_REQUIRED' },
+      { status: 400 }
+    );
+  }
 
   // ---- Supabase Auth 가입 (인증 메일 발송; Supabase 설정에서 "Confirm email" 이 켜져 있어야 함) ----
   try {
@@ -56,7 +64,7 @@ export async function POST(request: NextRequest) {
       email,
       password,
       options: {
-        data: { firstName, lastName },
+        data: { firstName, lastName, terms_version: TERMS_VERSION, terms_agreed_at: new Date().toISOString() },
         emailRedirectTo: emailRedirectTo(request),
       },
     });
@@ -90,6 +98,9 @@ export async function POST(request: NextRequest) {
     if (alreadyExists) {
       return NextResponse.json({ success: false, error: '이미 가입된 이메일입니다.' }, { status: 409 });
     }
+
+    // 약관 동의 기록 (감사용; 사용자 행은 이메일 인증 전에도 생성되어 있음)
+    if (data.user?.id) await recordConsent(data.user.id, 'signup', request);
 
     // 세션이 바로 발급되면 "Confirm email" 이 꺼진 상태 → 인증 없이 완료
     const needsConfirmation = !data.session;

@@ -188,3 +188,5 @@ security definer set search_path = public
 as $$
   delete from public.request_log where created_at < now() - interval '2 days';
 $$;
+
+-- ===== 004 + 005 는 별도 파일 참고 (004_models.sql, 005_tier1_safety.sql) — 번호 순으로 이어서 실행 =====

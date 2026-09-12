@@ -49,8 +49,19 @@ export interface GeneratedImage {
   height: number;
   storage_path: string;
   image_url: string;
+  is_flagged?: boolean;
   created_at: string;
 }
+
+/** 신고 사유 */
+export const REPORT_REASONS = {
+  sexual: '성적·선정적 내용',
+  violence: '폭력·잔혹한 내용',
+  hate: '혐오·차별적 내용',
+  religious: '신앙적으로 부적절한 묘사',
+  other: '기타',
+} as const;
+export type ReportReason = keyof typeof REPORT_REASONS;
 
 /** credits 테이블 행 */
 export interface CreditRow {

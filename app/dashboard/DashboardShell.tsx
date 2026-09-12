@@ -204,6 +204,12 @@ export default function DashboardShell({ children }: { children: React.ReactNode
           </DashboardContext.Provider>
         )}
       </main>
+
+      <footer style={{ maxWidth: '1100px', margin: '32px auto 0', padding: '12px 0', fontSize: '12px', color: '#64748b', display: 'flex', gap: '16px', justifyContent: 'center' }}>
+        <Link href="/legal/terms" style={{ color: '#94a3b8', textDecoration: 'none' }}>이용약관</Link>
+        <Link href="/legal/privacy" style={{ color: '#94a3b8', textDecoration: 'none' }}>개인정보처리방침</Link>
+        <span>문의: skarudsla@gmail.com</span>
+      </footer>
     </div>
   );
 }

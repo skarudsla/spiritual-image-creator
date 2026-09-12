@@ -5,6 +5,7 @@ import { generateImage, TogetherError } from '@/lib/together';
 import { preparePrompt, type PromptMode } from '@/lib/prompt';
 import { getModelForGeneration, DEFAULT_MODEL_ID } from '@/lib/models';
 import { checkGenerationAllowed } from '@/lib/limits';
+import { moderateImage } from '@/lib/moderation';
 import { IMAGE_STYLES, IMAGE_SIZES, type ImageStyle, type ImageSize } from '@/lib/types';
 
 export const runtime = 'nodejs';
@@ -13,6 +14,28 @@ export const maxDuration = 120;
 
 const BUCKET = 'generated-images';
 const MAX_PROMPT = 1000;
+const MAX_ATTEMPTS = 3; // 일시적 오류(서버/네트워크/429) 시 자동 재시도 횟수
+const RETRY_DELAYS_MS = [1500, 4000];
+
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+
+/** 일시적 오류만 재시도 (인증/설정/잘못된 요청은 즉시 실패) */
+async function generateWithRetry(params: Parameters<typeof generateImage>[0]) {
+  let lastErr: unknown;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    try {
+      return await generateImage(params);
+    } catch (err) {
+      lastErr = err;
+      const retryable =
+        err instanceof TogetherError && (err.kind === 'server' || err.kind === 'network' || err.kind === 'rate_limit');
+      if (!retryable || attempt === MAX_ATTEMPTS) throw err;
+      console.warn(`[generate] attempt ${attempt} failed (${(err as TogetherError).kind}), retrying...`);
+      await sleep(RETRY_DELAYS_MS[attempt - 1] ?? 4000);
+    }
+  }
+  throw lastErr;
+}
 
 // 모드별 공통 컨텍스트
 const BASE_CONTEXT: Record<PromptMode, string> = {
@@ -95,6 +118,10 @@ export async function POST(request: NextRequest) {
   // ---- 프롬프트 전처리: 금지어 차단 → 한→영 번역/강화 + 안전성 판정 (크레딧 차감 전) ----
   const prepared = await preparePrompt(prompt, mode === 'biblical' ? scripture : null, mode);
   if (!prepared.safe) {
+    await supabaseAdmin
+      .from('moderation_log')
+      .insert({ user_id: user.id, stage: 'prompt', model_id: model.id, prompt, reason: prepared.reason ?? null })
+      .then(({ error }) => error && console.warn('[generate] moderation_log insert failed:', error.message));
     return NextResponse.json(
       { success: false, error: prepared.reason, code: 'BLOCKED' },
       { status: 422 }
@@ -127,10 +154,10 @@ export async function POST(request: NextRequest) {
     if (error) console.error('[generate] refund_credit error:', error);
   };
 
-  // ---- 이미지 생성 ----
+  // ---- 이미지 생성 (일시적 오류 시 최대 3회 자동 재시도) ----
   let generated;
   try {
-    generated = await generateImage({
+    generated = await generateWithRetry({
       prompt: fullPrompt,
       width: size.width,
       height: size.height,
@@ -146,6 +173,20 @@ export async function POST(request: NextRequest) {
     }
     console.error('[generate] unexpected generation error:', err);
     return NextResponse.json({ success: false, error: '이미지 생성 중 오류가 발생했습니다.' }, { status: 500 });
+  }
+
+  // ---- 결과 이미지 검수 (부적절하면 저장하지 않고 환불) ----
+  const verdict = await moderateImage(generated.buffer);
+  if (!verdict.safe) {
+    await refund();
+    await supabaseAdmin
+      .from('moderation_log')
+      .insert({ user_id: user.id, stage: 'output', model_id: model.id, prompt, reason: verdict.reason ?? null })
+      .then(({ error }) => error && console.warn('[generate] moderation_log insert failed:', error.message));
+    return NextResponse.json(
+      { success: false, error: verdict.reason, code: 'OUTPUT_BLOCKED' },
+      { status: 422 }
+    );
   }
 
   // ---- Storage 업로드 ----
