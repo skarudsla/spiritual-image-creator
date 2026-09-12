@@ -6,8 +6,6 @@
  * FLUX 계열 모델은 영어 프롬프트에서 품질이 크게 좋아지므로 모든 입력을 영어로 정규화합니다.
  */
 
-import { togetherKey } from '@/lib/together';
-
 const TOGETHER_BASE = process.env.TOGETHER_BASE_URL || 'https://api.together.ai/v1';
 const PROMPT_MODEL =
   process.env.TOGETHER_PROMPT_MODEL || 'meta-llama/Llama-3.3-70B-Instruct-Turbo';
@@ -51,7 +49,7 @@ export function quickBlockCheck(text: string): string | null {
 }
 
 // ---- 2단계: LLM 번역 + 강화 + 안전성 ----
-const SYSTEM_PROMPT = `You are a prompt engineer for a Christian/Biblical AI image generator used by churches, families and ministries.
+const SYSTEM_PROMPT_BIBLICAL = `You are a prompt engineer for a Christian/Biblical AI image generator used by churches, families and ministries.
 
 Given a user's scene description (Korean or English) and an optional scripture reference, do ALL of the following and reply with ONLY a JSON object, no markdown:
 
@@ -66,6 +64,21 @@ IMPORTANT: The image model literally draws any words it sees, so the "english" p
 
 Mark safe=false ONLY for: sexual or nude content, sexualized minors, graphic gore/torture, hate symbols or content demeaning a group, glorification of terrorism, or explicit instructions to depict a real living person in a defamatory way. Ordinary biblical scenes including battles, crucifixion, martyrdom, angels, demons, judgment, or illness are SAFE and common in Christian art — do not block them.`;
 
+const SYSTEM_PROMPT_GENERAL = `You are a prompt engineer for a general-purpose AI image generator.
+
+Given a user's scene description (Korean or English), reply with ONLY a JSON object, no markdown:
+
+{
+  "english": "<a vivid, concrete English image prompt, 1-3 sentences, describing ONLY what is visible: subjects, setting, action, clothing, lighting, mood, composition; keep the user's intent and style words; never add quoted text, captions, logos or watermarks unless the user explicitly asks for text in the image>",
+  "was_english": <true if the user's input was already in English>,
+  "safe": <true/false>,
+  "reason_ko": "<if safe is false: one short Korean sentence telling the user why. Empty string if safe>"
+}
+
+Mark safe=false ONLY for: sexual or nude content, sexualized minors, graphic gore/torture, hate symbols or content demeaning a group, glorification of terrorism, or explicit instructions to depict a real living person in a defamatory or sexual way. Everything else (fantasy, action, horror atmosphere, portraits, products, landscapes) is SAFE.`;
+
+export type PromptMode = 'biblical' | 'general';
+
 interface LlmJson {
   english?: string;
   was_english?: boolean;
@@ -73,7 +86,7 @@ interface LlmJson {
   reason_ko?: string;
 }
 
-export async function preparePrompt(userPrompt: string, scripture?: string | null): Promise<PromptResult> {
+export async function preparePrompt(userPrompt: string, scripture?: string | null, mode: PromptMode = 'biblical'): Promise<PromptResult> {
   const combined = [userPrompt, scripture].filter(Boolean).join(' ');
 
   // 1) 즉시 차단
@@ -82,7 +95,7 @@ export async function preparePrompt(userPrompt: string, scripture?: string | nul
     return { english: '', wasEnglish: false, safe: false, reason: blocked, fallback: false };
   }
 
-  const apiKey = togetherKey();
+  const apiKey = process.env.TOGETHER_AI_API_KEY;
   if (!apiKey || apiKey.startsWith('your-')) {
     return { english: userPrompt, wasEnglish: true, safe: true, fallback: true };
   }
@@ -98,10 +111,12 @@ export async function preparePrompt(userPrompt: string, scripture?: string | nul
         max_tokens: 400,
         response_format: { type: 'json_object' },
         messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
+          { role: 'system', content: mode === 'general' ? SYSTEM_PROMPT_GENERAL : SYSTEM_PROMPT_BIBLICAL },
           {
             role: 'user',
-            content: `Scene: ${userPrompt}\nScripture: ${scripture || '(none)'}`,
+            content: mode === 'general'
+              ? `Scene: ${userPrompt}`
+              : `Scene: ${userPrompt}\nScripture: ${scripture || '(none)'}`,
           },
         ],
       }),

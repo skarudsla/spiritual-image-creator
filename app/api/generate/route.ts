@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSessionUser } from '@/lib/auth';
 import { supabaseAdmin } from '@/lib/supabase';
 import { generateImage, TogetherError } from '@/lib/together';
-import { preparePrompt } from '@/lib/prompt';
+import { preparePrompt, type PromptMode } from '@/lib/prompt';
+import { getModelForGeneration, DEFAULT_MODEL_ID } from '@/lib/models';
 import { checkGenerationAllowed } from '@/lib/limits';
 import { IMAGE_STYLES, IMAGE_SIZES, type ImageStyle, type ImageSize } from '@/lib/types';
 
@@ -13,9 +14,13 @@ export const maxDuration = 120;
 const BUCKET = 'generated-images';
 const MAX_PROMPT = 1000;
 
-// 기독교/성경 이미지 특화: 모든 프롬프트에 붙는 공통 컨텍스트
-const BASE_CONTEXT =
-  'reverent Christian biblical scene, spiritually uplifting, sacred atmosphere, purely visual illustration without any text, letters, captions, signatures or watermarks';
+// 모드별 공통 컨텍스트
+const BASE_CONTEXT: Record<PromptMode, string> = {
+  biblical:
+    'reverent Christian biblical scene, spiritually uplifting, sacred atmosphere, purely visual illustration without any text, letters, captions, signatures or watermarks',
+  general:
+    'high quality, detailed, no watermark, no signature',
+};
 
 export async function POST(request: NextRequest) {
   // ---- 인증 ----
@@ -40,7 +45,7 @@ export async function POST(request: NextRequest) {
   }
 
   // ---- 입력 파싱/검증 ----
-  let body: { prompt?: string; style?: string; size?: string; scripture?: string };
+  let body: { prompt?: string; style?: string; size?: string; scripture?: string; modelId?: string; mode?: string };
   try {
     body = await request.json();
   } catch {
@@ -51,6 +56,8 @@ export async function POST(request: NextRequest) {
   const scripture = (body.scripture ?? '').trim() || null;
   const styleKey = (body.style ?? 'painting') as ImageStyle;
   const sizeKey = (body.size ?? 'square') as ImageSize;
+  const mode: PromptMode = body.mode === 'general' ? 'general' : 'biblical';
+  const modelId = (body.modelId ?? DEFAULT_MODEL_ID).trim();
 
   if (!prompt) {
     return NextResponse.json({ success: false, error: '프롬프트를 입력해주세요.' }, { status: 400 });
@@ -71,20 +78,34 @@ export async function POST(request: NextRequest) {
   const style = IMAGE_STYLES[styleKey];
   const size = IMAGE_SIZES[sizeKey];
 
+  // ---- 모델 카탈로그 조회 ----
+  const model = await getModelForGeneration(modelId);
+  if (!model) {
+    return NextResponse.json({ success: false, error: '선택한 모델을 사용할 수 없습니다.' }, { status: 400 });
+  }
+  if (model.provider !== 'together') {
+    // comfyui 등은 프리미엄 인프라 연결 후 활성화
+    return NextResponse.json(
+      { success: false, error: '이 모델은 아직 준비 중입니다. 다른 모델을 선택해주세요.', code: 'MODEL_NOT_READY' },
+      { status: 503 }
+    );
+  }
+  const cost = model.credit_cost;
+
   // ---- 프롬프트 전처리: 금지어 차단 → 한→영 번역/강화 + 안전성 판정 (크레딧 차감 전) ----
-  const prepared = await preparePrompt(prompt, scripture);
+  const prepared = await preparePrompt(prompt, mode === 'biblical' ? scripture : null, mode);
   if (!prepared.safe) {
     return NextResponse.json(
       { success: false, error: prepared.reason, code: 'BLOCKED' },
       { status: 422 }
     );
   }
-  const fullPrompt = [prepared.english, style.suffix, BASE_CONTEXT].filter(Boolean).join(', ');
+  const fullPrompt = [prepared.english, style.suffix, BASE_CONTEXT[mode]].filter(Boolean).join(', ');
 
   // ---- 크레딧 차감 (원자적) ----
   const { data: consumed, error: creditErr } = await supabaseAdmin.rpc('consume_credit', {
     p_user_id: user.id,
-    p_amount: 1,
+    p_amount: cost,
   });
 
   if (creditErr) {
@@ -96,20 +117,27 @@ export async function POST(request: NextRequest) {
   }
   if (!consumed) {
     return NextResponse.json(
-      { success: false, error: '크레딧이 부족합니다.', code: 'NO_CREDITS' },
+      { success: false, error: `크레딧이 부족합니다. (이 모델은 ${cost}크레딧)`, code: 'NO_CREDITS' },
       { status: 402 }
     );
   }
 
   const refund = async () => {
-    const { error } = await supabaseAdmin.rpc('refund_credit', { p_user_id: user.id, p_amount: 1 });
+    const { error } = await supabaseAdmin.rpc('refund_credit', { p_user_id: user.id, p_amount: cost });
     if (error) console.error('[generate] refund_credit error:', error);
   };
 
   // ---- 이미지 생성 ----
   let generated;
   try {
-    generated = await generateImage({ prompt: fullPrompt, width: size.width, height: size.height });
+    generated = await generateImage({
+      prompt: fullPrompt,
+      width: size.width,
+      height: size.height,
+      model: model.provider_model,
+      loraPath: model.lora_path ?? undefined,
+      extra: model.params,
+    });
   } catch (err) {
     await refund();
     if (err instanceof TogetherError) {
@@ -148,8 +176,10 @@ export async function POST(request: NextRequest) {
       prompt,
       prompt_en: prepared.english,
       style: styleKey,
-      scripture,
+      scripture: mode === 'biblical' ? scripture : null,
       model: generated.model,
+      model_id: model.id,
+      mode,
       width: size.width,
       height: size.height,
       storage_path: storagePath,
@@ -177,8 +207,10 @@ export async function POST(request: NextRequest) {
       prompt,
       prompt_en: prepared.english,
       style: styleKey,
-      scripture,
+      scripture: mode === 'biblical' ? scripture : null,
       model: generated.model,
+      model_id: model.id,
+      mode,
       width: size.width,
       height: size.height,
       image_url: pub.publicUrl,

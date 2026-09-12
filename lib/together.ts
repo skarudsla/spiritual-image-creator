@@ -10,12 +10,6 @@
  *  - Rundiffusion/Juggernaut-Lightning-Flux  ($0.0017/MP, 매우 저렴·빠름)
  *  - black-forest-labs/FLUX.1.1-pro          ($0.04/MP, 고품질)
  */
-/** TOGETHER_AI_API_KEY 앞뒤 공백/따옴표 제거 */
-export function togetherKey(): string | undefined {
-  const t = process.env.TOGETHER_AI_API_KEY?.trim().replace(/^["']|["']$/g, '').trim();
-  return t || undefined;
-}
-
 export const DEFAULT_IMAGE_MODEL =
   process.env.TOGETHER_IMAGE_MODEL || 'black-forest-labs/FLUX.2-dev';
 
@@ -34,7 +28,7 @@ export class TogetherError extends Error {
 }
 
 export function isTogetherConfigured(): boolean {
-  const key = togetherKey();
+  const key = process.env.TOGETHER_AI_API_KEY;
   return !!key && !key.startsWith('your-');
 }
 
@@ -44,6 +38,12 @@ export interface GenerateImageParams {
   height: number;
   steps?: number;
   seed?: number;
+  /** 제공자 모델 ID (미지정 시 DEFAULT_IMAGE_MODEL) */
+  model?: string;
+  /** 자체 LoRA (Together image_loras 형식) */
+  loraPath?: string;
+  /** 모델별 추가 파라미터 (models.params) */
+  extra?: Record<string, unknown>;
 }
 
 export interface GenerateImageResult {
@@ -59,15 +59,18 @@ export async function generateImage(params: GenerateImageParams): Promise<Genera
     throw new TogetherError('TOGETHER_AI_API_KEY 가 설정되지 않았습니다.', 503, 'config');
   }
 
-  const body = {
-    model: DEFAULT_IMAGE_MODEL,
+  const model = params.model || DEFAULT_IMAGE_MODEL;
+  const body: Record<string, unknown> = {
+    model,
     prompt: params.prompt,
     width: params.width,
     height: params.height,
     n: 1,
-    ...(params.steps !== undefined ? { steps: params.steps } : {}), // 미지정 시 모델 기본값 사용
     response_format: 'base64',
+    ...(params.extra ?? {}),
+    ...(params.steps !== undefined ? { steps: params.steps } : {}), // 미지정 시 모델 기본값 사용
     ...(params.seed !== undefined ? { seed: params.seed } : {}),
+    ...(params.loraPath ? { image_loras: [{ path: params.loraPath, scale: 1 }] } : {}),
   };
 
   let res: Response;
@@ -75,7 +78,7 @@ export async function generateImage(params: GenerateImageParams): Promise<Genera
     res = await fetch(TOGETHER_URL, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${togetherKey()}`,
+        Authorization: `Bearer ${process.env.TOGETHER_AI_API_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(body),
@@ -125,7 +128,7 @@ export async function generateImage(params: GenerateImageParams): Promise<Genera
 
   return {
     buffer: Buffer.from(item.b64_json, 'base64'),
-    model: json.model ?? DEFAULT_IMAGE_MODEL,
+    model: json.model ?? model,
     seed: item.seed,
   };
 }

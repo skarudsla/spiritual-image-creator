@@ -43,6 +43,8 @@ export interface GeneratedImage {
   style: string | null;
   scripture: string | null;
   model: string;
+  model_id: string | null;
+  mode: 'biblical' | 'general' | string;
   width: number;
   height: number;
   storage_path: string;
