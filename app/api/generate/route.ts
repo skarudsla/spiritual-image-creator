@@ -3,6 +3,7 @@ import { getSessionUser } from '@/lib/auth';
 import { supabaseAdmin } from '@/lib/supabase';
 import { generateImage, TogetherError } from '@/lib/together';
 import { preparePrompt } from '@/lib/prompt';
+import { checkGenerationAllowed } from '@/lib/limits';
 import { IMAGE_STYLES, IMAGE_SIZES, type ImageStyle, type ImageSize } from '@/lib/types';
 
 export const runtime = 'nodejs';
@@ -27,6 +28,15 @@ export async function POST(request: NextRequest) {
   }
   if (!user) {
     return NextResponse.json({ success: false, error: '로그인이 필요합니다.' }, { status: 401 });
+  }
+
+  // ---- 남용 방어: 일시정지 / 전체 일일 상한 / 계정당 횟수 제한 ----
+  const allowed = await checkGenerationAllowed(user.id);
+  if (!allowed.ok) {
+    return NextResponse.json(
+      { success: false, error: allowed.message, code: 'RATE_LIMITED' },
+      { status: allowed.unavailable ? 503 : 429 }
+    );
   }
 
   // ---- 입력 파싱/검증 ----

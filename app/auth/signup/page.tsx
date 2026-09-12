@@ -16,6 +16,9 @@ export default function SignUp() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [needsConfirmation, setNeedsConfirmation] = useState(false);
+  const [resendMsg, setResendMsg] = useState('');
+  const [resending, setResending] = useState(false);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -75,6 +78,10 @@ export default function SignUp() {
       }
 
       setSuccess(true);
+      if (data.needsConfirmation) {
+        setNeedsConfirmation(true); // 인증 메일 안내 화면으로 전환
+        return;
+      }
       setTimeout(() => {
         router.push('/auth/signin');
       }, 1200);
@@ -84,6 +91,89 @@ export default function SignUp() {
       setLoading(false);
     }
   };
+
+  const handleResend = async () => {
+    setResending(true);
+    setResendMsg('');
+    try {
+      const res = await fetch('/api/auth/resend', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: formData.email }),
+      });
+      const data = await res.json();
+      setResendMsg(data.success ? '✅ 인증 메일을 다시 보냈습니다.' : `❌ ${data.error || '재발송에 실패했습니다.'}`);
+    } catch {
+      setResendMsg('❌ 네트워크 오류가 발생했습니다.');
+    } finally {
+      setResending(false);
+    }
+  };
+
+  // ---- 인증 메일 안내 화면 ----
+  if (needsConfirmation) {
+    return (
+      <div style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: 'linear-gradient(to bottom, #1e293b, #0f172a)',
+        color: 'white',
+        padding: '20px'
+      }}>
+        <div style={{
+          width: '100%',
+          maxWidth: '400px',
+          background: '#1e293b',
+          padding: '40px',
+          borderRadius: '12px',
+          boxShadow: '0 10px 40px rgba(0, 0, 0, 0.3)',
+          textAlign: 'center'
+        }}>
+          <div style={{ fontSize: '48px', marginBottom: '12px' }}>📬</div>
+          <h1 style={{ fontSize: '26px', marginBottom: '10px' }}>메일을 확인해주세요</h1>
+          <p style={{ color: '#cbd5e1', marginBottom: '6px', lineHeight: 1.6 }}>
+            <strong style={{ color: 'white' }}>{formData.email}</strong> 로<br />인증 메일을 보냈습니다.
+          </p>
+          <p style={{ color: '#94a3b8', fontSize: '13px', marginBottom: '24px', lineHeight: 1.6 }}>
+            메일 안의 링크를 누르면 가입이 완료됩니다.<br />
+            받은 편지함에 없으면 스팸함도 확인해주세요.
+          </p>
+
+          {resendMsg && (
+            <p style={{ fontSize: '13px', marginBottom: '12px', color: resendMsg.startsWith('✅') ? '#10b981' : '#ef4444' }}>
+              {resendMsg}
+            </p>
+          )}
+
+          <button
+            type="button"
+            onClick={handleResend}
+            disabled={resending}
+            style={{
+              width: '100%',
+              padding: '12px',
+              background: resending ? '#4b5563' : '#334155',
+              color: 'white',
+              border: 'none',
+              borderRadius: '6px',
+              fontSize: '14px',
+              fontWeight: 'bold',
+              cursor: resending ? 'not-allowed' : 'pointer',
+              marginBottom: '14px'
+            }}
+          >
+            {resending ? '보내는 중...' : '인증 메일 다시 보내기'}
+          </button>
+
+          <Link href="/auth/signin" style={{ color: '#3b82f6', textDecoration: 'none', fontWeight: 'bold', fontSize: '14px' }}>
+            로그인 페이지로
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{

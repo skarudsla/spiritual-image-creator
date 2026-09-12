@@ -1,11 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin, ACCESS_TOKEN_COOKIE, REFRESH_TOKEN_COOKIE } from '@/lib/supabase';
+import { checkSigninAllowed, clientIp } from '@/lib/limits';
 
 export const runtime = 'nodejs';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export async function POST(request: NextRequest) {
+  // ---- IP 기준 로그인 시도 제한 (무차별 대입 방어) ----
+  const limit = await checkSigninAllowed(clientIp(request));
+  if (!limit.ok) {
+    return NextResponse.json({ success: false, error: limit.message }, { status: 429 });
+  }
+
   let body: { email?: string; password?: string };
 
   try {
@@ -62,14 +69,16 @@ export async function POST(request: NextRequest) {
       const status = error?.status ?? 401;
       let message = '이메일 또는 비밀번호가 올바르지 않습니다.';
 
+      let code: string | undefined;
       if (error?.message?.toLowerCase().includes('email not confirmed')) {
-        message = '이메일 인증이 완료되지 않았습니다. 받은 편지함을 확인해주세요.';
+        message = '이메일 인증이 완료되지 않았습니다. 받은 편지함에서 인증 링크를 눌러주세요.';
+        code = 'EMAIL_NOT_CONFIRMED';
       } else if (status === 429) {
         message = '로그인 시도가 너무 많습니다. 잠시 후 다시 시도해주세요.';
       }
 
       return NextResponse.json(
-        { success: false, error: message },
+        { success: false, error: message, ...(code ? { code } : {}) },
         { status: status === 400 ? 401 : status }
       );
     }

@@ -32,6 +32,9 @@ function SignInForm() {
   const [formData, setFormData] = useState({ email: '', password: '' });
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+  const [needsConfirm, setNeedsConfirm] = useState(false);
+  const [resendMsg, setResendMsg] = useState('');
+  const justConfirmed = searchParams.get('confirmed') === '1';
   const [loading, setLoading] = useState(false);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -44,6 +47,8 @@ function SignInForm() {
     e.preventDefault();
     setError('');
     setSuccess(false);
+    setNeedsConfirm(false);
+    setResendMsg('');
 
     // ---- 클라이언트 유효성 검사 ----
     if (!formData.email || !formData.password) {
@@ -75,6 +80,7 @@ function SignInForm() {
 
       if (!res.ok || !data.success) {
         setError(data.error || '로그인에 실패했습니다.');
+        setNeedsConfirm(data.code === 'EMAIL_NOT_CONFIRMED');
         return;
       }
 
@@ -87,6 +93,21 @@ function SignInForm() {
       setError('네트워크 오류가 발생했습니다. 잠시 후 다시 시도해주세요.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleResend = async () => {
+    setResendMsg('');
+    try {
+      const res = await fetch('/api/auth/resend', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: formData.email }),
+      });
+      const data = await res.json();
+      setResendMsg(data.success ? '✅ 인증 메일을 다시 보냈습니다. 받은 편지함을 확인해주세요.' : `❌ ${data.error}`);
+    } catch {
+      setResendMsg('❌ 네트워크 오류가 발생했습니다.');
     }
   };
 
@@ -126,6 +147,19 @@ function SignInForm() {
           </div>
         )}
 
+        {justConfirmed && !error && !success && (
+          <div style={{
+            background: '#10b981',
+            color: 'white',
+            padding: '12px',
+            borderRadius: '8px',
+            marginBottom: '20px',
+            textAlign: 'center'
+          }}>
+            ✅ 이메일 인증이 완료되었습니다. 로그인해주세요.
+          </div>
+        )}
+
         {error && (
           <div style={{
             background: '#ef4444',
@@ -135,6 +169,18 @@ function SignInForm() {
             marginBottom: '20px'
           }}>
             ❌ {error}
+            {needsConfirm && (
+              <div style={{ marginTop: '8px' }}>
+                <button
+                  type="button"
+                  onClick={handleResend}
+                  style={{ background: 'white', color: '#ef4444', border: 'none', borderRadius: '4px', padding: '6px 10px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}
+                >
+                  인증 메일 다시 보내기
+                </button>
+                {resendMsg && <p style={{ margin: '8px 0 0', fontSize: '12px' }}>{resendMsg}</p>}
+              </div>
+            )}
           </div>
         )}
 
