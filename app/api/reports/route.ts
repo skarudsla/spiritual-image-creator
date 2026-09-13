@@ -5,7 +5,7 @@ import { supabaseAdmin } from '@/lib/supabase';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-export const REPORT_REASONS = ['sexual', 'violence', 'hate', 'religious', 'other'] as const;
+const REPORT_REASONS = ['sexual', 'violence', 'hate', 'religious', 'other'] as const;
 type ReportReason = (typeof REPORT_REASONS)[number];
 
 /** 이미지 신고 접수 — 접수 즉시 해당 이미지는 is_flagged 로 표시 */
