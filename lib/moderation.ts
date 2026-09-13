@@ -6,7 +6,7 @@
  */
 
 const TOGETHER_BASE = process.env.TOGETHER_BASE_URL || 'https://api.together.ai/v1';
-const VISION_MODEL = process.env.TOGETHER_VISION_MODEL || 'meta-llama/Llama-4-Scout-17B-16E-Instruct';
+const VISION_MODEL = process.env.TOGETHER_VISION_MODEL || 'Qwen/Qwen3.5-9B';
 
 export interface ModerationResult {
   safe: boolean;
