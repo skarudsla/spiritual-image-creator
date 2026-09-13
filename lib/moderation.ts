@@ -39,8 +39,10 @@ export async function moderateImage(png: Buffer): Promise<ModerationResult> {
       headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model: VISION_MODEL,
-        max_tokens: 120,
+        max_tokens: 400,
         temperature: 0,
+        // Qwen3 계열: 사고(thinking) 출력 비활성화 — 켜져 있으면 답이 사고 토큰에 밀려 비어버림
+        chat_template_kwargs: { enable_thinking: false },
         messages: [
           {
             role: 'user',
@@ -59,11 +61,15 @@ export async function moderateImage(png: Buffer): Promise<ModerationResult> {
       return { safe: true, skipped: true };
     }
 
-    const json = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> };
-    const content = json.choices?.[0]?.message?.content ?? '';
-    const match = content.match(/\{[\s\S]*\}/);
+    const json = (await res.json()) as {
+      choices?: Array<{ message?: { content?: string | null; reasoning_content?: string | null } }>;
+    };
+    const msg = json.choices?.[0]?.message;
+    // <think>…</think> 가 섞여 오면 제거하고, content 가 비면 reasoning 쪽에서라도 JSON 을 찾는다
+    const raw = `${msg?.content ?? ''}\n${msg?.reasoning_content ?? ''}`.replace(/<think>[\s\S]*?<\/think>/g, '');
+    const match = raw.match(/\{[^{}]*"safe"[^{}]*\}/);
     if (!match) {
-      console.warn('[moderation] unparseable response:', content.slice(0, 200));
+      console.warn('[moderation] unparseable response:', JSON.stringify(msg).slice(0, 300));
       return { safe: true, skipped: true };
     }
 
