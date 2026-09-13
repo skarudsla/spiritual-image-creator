@@ -71,6 +71,13 @@ export default function DashboardShell({ children }: { children: React.ReactNode
         }
         setUser(data.user);
         refreshCredits();
+        // OAuth 콜백 직후 등 첫 조회가 비면 잠시 후 한 번 더
+        setTimeout(() => {
+          setCredits(c => {
+            if (c === null) refreshCredits();
+            return c;
+          });
+        }, 1500);
       } catch {
         if (!cancelled) setError('네트워크 오류가 발생했습니다.');
       } finally {
